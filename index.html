@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AnnJudy 中文課 - AI 語音識別自動口說評分</title>
+    <!-- 引入 Tailwind CSS 實現高級感版面 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google 字體：適合兒童的圓體 (Nunito) 與泰文字體 (Mitr) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@300;400;500;600&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- 引入輕量中文轉拼音庫 pinyin-pro -->
+    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.18.3/dist/index.js"></script>
+
+    <style>
+        body {
+            font-family: 'Nunito', 'Mitr', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #faf8f5;
+        }
+        /* 馬卡龍柔和陰影與漸層 */
+        .macaron-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+            border: 2px solid #f1f5f9;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.02);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .macaron-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(221, 214, 254, 0.3);
+        }
+        /* 錄音呼吸動畫 */
+        @keyframes pulse-glow {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0px rgba(244, 63, 94, 0.4);
+            }
+            50% {
+                transform: scale(1.08);
+                box-shadow: 0 0 0 15px rgba(244, 63, 94, 0);
+            }
+        }
+        .recording-active {
+            animation: pulse-glow 1.5s infinite ease-in-out;
+            background-color: #f43f5e !important;
+        }
+        /* 音波跳動動畫 */
+        @keyframes wave-jump {
+            0%, 100% { transform: scaleY(0.3); }
+            50% { transform: scaleY(1); }
+        }
+        .bar {
+            animation: wave-jump 1s infinite ease-in-out;
+        }
+        .bar:nth-child(2) { animation-delay: 0.15s; }
+        .bar:nth-child(3) { animation-delay: 0.3s; }
+        .bar:nth-child(4) { animation-delay: 0.45s; }
+        .bar:nth-child(5) { animation-delay: 0.6s; }
+
+        /* 撐開拼音對齊樣式 */
+        ruby {
+            ruby-position: over;
+            rt-side: right;
+        }
+        rt {
+            font-family: 'Nunito', sans-serif;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.1em;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between">
+
+    <!-- 頂部可愛導覽列 -->
+    <header class="bg-gradient-to-r from-teal-100 via-amber-100 to-rose-100 border-b border-white py-4 px-6 shadow-sm">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <!-- 可愛卡通圖標 -->
+                <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md border-2 border-amber-300">
+                    <span class="text-2xl">🐼</span>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-extrabold text-slate-800 tracking-wide flex items-center gap-2">
+                        <span>AnnJudy 中文课</span>
+                        <span class="text-sm bg-rose-400 text-white font-bold py-0.5 px-2 rounded-full shadow-sm select-none">AI Speaking</span>
+                    </h1>
+                    <p class="text-xs text-slate-600 font-medium">ระบบประเมินการออกเสียงภาษาจีนอัจฉริยะสำหรับเด็ก / 兒童中文智慧口說測評系統</p>
+                </div>
+            </div>
+            
+            <!-- 泰中雙語說明 -->
+            <div class="text-right text-xs text-slate-500 max-w-md hidden md:block">
+                <span>💡 วิธีใช้งาน: เลือกประโยคทางซ้าย ➜ กรอกชื่อ ➜ กดไมโครโฟนเพื่อพูด ➜ กดส่งคะแนนให้คุณครู!</span>
+                <br>
+                <span>💡 使用說明：選擇左側題目 ➜ 輸入名字 ➜ 點擊麥克風說話 ➜ 點擊傳送成績給老師！</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主體內容區 (雙欄配置) -->
+    <main class="max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-8 flex-grow">
+        
+        <!-- 左側欄：老師控制與題目區 (佔 5 格) -->
+        <section class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- 老師出題控制卡 -->
+            <div class="macaron-card rounded-3xl p-6 border-t-8 border-teal-300 bg-white">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-xl">👩‍🏫</span>
+                    <h2 class="text-lg font-bold text-slate-700">老师出题 / คุณครูตั้งโจทย์</h2>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 mb-1.5">
+                            ประโยคภาษาจีน / 請老師輸入中文句子 <span class="text-rose-500">*</span>
+                        </label>
+                        <input id="input-chinese" type="text" placeholder="ตัวอย่าง: 我喜欢吃芒果 (ระบบจะแปลไทยให้เอง)" 
+                               class="w-full px-4 py-2.5 rounded-xl border-2 border-slate-100 focus:border-teal-300 focus:outline-none transition-all text-sm">
+                    </div>
+                    
+                    <div class="flex flex-col gap-2">
+                        <!-- 新增題目按鈕 -->
+                        <button id="btn-add-sentence" class="w-full py-2.5 px-4 bg-teal-400 hover:bg-teal-500 active:scale-[0.98] text-white font-bold rounded-xl shadow-md shadow-teal-100 transition-all text-sm flex items-center justify-center gap-2">
+                            <span id="btn-add-spinner" class="hidden">
+                                <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </span>
+                            <span id="btn-add-icon">➕</span>
+                            <span id="btn-add-text">เพิ่มประโยคใหม่ / 新增題目</span>
+                        </button>
+
+                        <!-- 複製作業連結按鈕 -->
+                        <button id="btn-share-homework" class="w-full py-2.5 px-4 bg-indigo-400 hover:bg-indigo-500 active:scale-[0.98] text-white font-bold rounded-xl shadow-md shadow-indigo-100 transition-all text-sm flex items-center justify-center gap-2">
+                            <span>🔗</span>
+                            <span>คัดลอกลิงก์การบ้าน / 複製今日作業連結</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 題目列表卡 -->
+            <div class="macaron-card rounded-3xl p-6 border-t-8 border-sky-300 bg-white flex-grow flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">📚</span>
+                        <h2 class="text-lg font-bold text-slate-700">選擇題目 / รายการโจทย์</h2>
+                    </div>
+                    <span id="list-count" class="text-xs bg-sky-100 text-sky-700 font-bold py-1 px-2.5 rounded-full">0 ข้อ</span>
+                </div>
+
+                <!-- 滾動題目列表 -->
+                <div id="sentence-list" class="space-y-3 max-h-[400px] overflow-y-auto pr-2 flex-grow">
+                    <!-- 動態渲染項目 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 右側欄：AI 錄音與評分報告區 (佔 7 格) -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- 目前挑選的題目預覽大字卡 -->
+            <div class="macaron-card rounded-3xl p-6 border-2 border-dashed border-amber-200 bg-amber-50/40 text-center relative overflow-hidden">
+                <div class="absolute top-2 left-3 text-xs font-bold text-amber-600/70">กำลังฝึกประโยคนี้ / 當前正在練習：</div>
+                
+                <!-- 大拼音漢字展現區 -->
+                <div id="current-text-ruby" class="my-6 min-h-[90px] flex flex-wrap justify-center items-end gap-y-6 px-4">
+                    <!-- 動態加載拼音 -->
+                </div>
+
+                <!-- 泰文翻譯顯示 (自動翻譯結果) -->
+                <div class="mt-2 text-slate-500 font-medium text-sm flex items-center justify-center gap-1.5">
+                    <span class="text-lg">🇹🇭</span>
+                    <span id="current-thai-translation">รอข้อมูลประโยคจากคุณครู / 正在等待老師出題...</span>
+                </div>
+
+                <!-- 標準發音播放器 -->
+                <button id="btn-play-tts" class="mt-4 inline-flex items-center gap-2 bg-amber-300 hover:bg-amber-400 active:scale-95 text-slate-800 font-bold py-2 px-6 rounded-full shadow-md shadow-amber-100 transition-all text-xs">
+                    <svg class="w-4 h-4 text-slate-800" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.343 12H2a1 1 0 01-1-1V9a1 1 0 011-1h2.343l3.95-3.95a1 1 0 011.09-.274zM12 9a1 1 0 011-1h2a1 1 0 110 2h-2a1 1 0 01-1-1zm-.707 5.293a1 1 0 001.414 1.414l1.414-1.414a1 1 0 10-1.414-1.414l-1.414 1.414zM12.707 5.293a1 1 0 011.414 0l1.414 1.414a1 1 0 11-1.414 1.414l-1.414-1.414a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                    <span>ฟังเสียงคุณครู (ช้า) / 聽標準慢速發音</span>
+                </button>
+            </div>
+
+            <!-- AI 麥克風錄音與學生姓名區 -->
+            <div class="macaron-card rounded-3xl p-6 bg-white flex flex-col items-center justify-center min-h-[220px]">
+                
+                <!-- 姓名輸入框 (防呆機制) -->
+                <div class="w-full max-w-sm mb-4">
+                    <label class="block text-center text-xs font-bold text-slate-500 mb-1.5">
+                        📝 ชื่อนักเรียน / 請先輸入學生姓名 <span class="text-rose-500">*</span>
+                    </label>
+                    <input id="student-name" type="text" placeholder="พิมพ์ชื่อเล่นหรือชื่อจริงของคุณ (เช่น Ann)" 
+                           class="w-full text-center px-4 py-2 rounded-2xl border-2 border-dashed border-rose-200 focus:border-rose-400 focus:ring-0 focus:outline-none transition-all text-sm font-semibold bg-rose-50/20 placeholder-slate-400">
+                </div>
+
+                <!-- 狀態引導文字 -->
+                <div class="text-center mb-4">
+                    <p id="rec-status-th" class="text-base font-bold text-slate-700">กดไมโครโฟน แล้วพูดประโยคข้างบนเลยนะ!</p>
+                    <p id="rec-status-zh" class="text-xs text-slate-400 font-medium mt-0.5">點擊下方麥克風，大聲讀出上面的句子吧！</p>
+                </div>
+
+                <!-- 大麥克風控制區 -->
+                <div class="relative flex items-center justify-center my-2">
+                    <button id="btn-mic" class="w-24 h-24 rounded-full bg-rose-400 hover:bg-rose-500 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-rose-100 transition-all cursor-pointer relative z-10 focus:outline-none">
+                        <!-- 麥克風 SVG -->
+                        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- 音波跳動特效 (錄音時顯示) -->
+                <div id="sound-wave" class="flex items-center gap-1.5 h-6 opacity-0 transition-opacity duration-300 my-2">
+                    <div class="w-1.5 h-full bg-rose-400 rounded-full bar"></div>
+                    <div class="w-1.5 h-full bg-rose-400 rounded-full bar"></div>
+                    <div class="w-1.5 h-full bg-rose-400 rounded-full bar"></div>
+                    <div class="w-1.5 h-full bg-rose-400 rounded-full bar"></div>
+                    <div class="w-1.5 h-full bg-rose-400 rounded-full bar"></div>
+                </div>
+
+                <!-- 學生即時辨識文字顯示框 -->
+                <div class="w-full mt-2 bg-slate-50 border border-slate-100 rounded-2xl p-4 min-h-[60px] text-center">
+                    <p class="text-xs font-bold text-slate-400 mb-1 select-none">สิ่งที่คุณพูด / 學生唸出的中文文字：</p>
+                    <p id="transcript-display" class="text-xl font-bold text-slate-400 tracking-wider">...</p>
+                </div>
+
+                <!-- 可愛模擬語音按鈕 (供無麥克風環境測試用) -->
+                <div class="mt-4 w-full flex items-center justify-center gap-2">
+                    <span class="text-xs text-slate-400">💡 ไม่มีไมโครโฟน? ลองปุ่มนี้ / 沒有麥克風？可用模擬：</span>
+                    <button id="btn-simulate" class="py-1 px-3 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-600 rounded-full text-xs font-semibold transition-all">
+                        🚀 จำลองเสียงพูด / 模擬學生說話
+                    </button>
+                </div>
+            </div>
+
+            <!-- AI 評分報告區 (預設隱藏) -->
+            <div id="result-card" class="macaron-card rounded-3xl p-6 border-t-8 border-emerald-300 bg-white hidden transition-all duration-500">
+                
+                <!-- Google Form 成績上傳狀態條 -->
+                <div id="form-upload-bar" class="mb-4 p-3 rounded-2xl bg-sky-50 border border-sky-100 flex items-center justify-between text-xs text-sky-700 font-bold hidden">
+                    <span class="flex items-center gap-2">
+                        <span id="upload-icon" class="animate-bounce inline-block">✈️</span>
+                        <span id="upload-status-text">กำลังส่งคะแนนของคุณไปยัง Google Form... / 正在傳送成績至表單...</span>
+                    </span>
+                </div>
+
+                <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+                    <span class="text-xl">🏆</span>
+                    <h2 class="text-lg font-bold text-slate-700">รายงานผลการออกเสียง / AI 雙語自動評分報告</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                    
+                    <!-- 分數環 -->
+                    <div class="flex flex-col items-center justify-center">
+                        <div class="relative w-36 h-36 flex items-center justify-center">
+                            <!-- SVG 圓形進度條 -->
+                            <svg class="absolute transform -rotate-90 w-full h-full">
+                                <circle cx="72" cy="72" r="60" stroke="#f1f5f9" stroke-width="12" fill="transparent"></circle>
+                                <circle id="score-circle" cx="72" cy="72" r="60" stroke="#10b981" stroke-width="12" fill="transparent"
+                                        stroke-dasharray="377" stroke-dashoffset="377" stroke-linecap="round" class="transition-all duration-1000"></circle>
+                            </svg>
+                            <div class="text-center z-10">
+                                <span id="score-text" class="text-4xl font-extrabold text-slate-800">0</span>
+                                <span class="text-sm font-bold text-slate-400">/100</span>
+                                <p class="text-[10px] text-slate-400 font-bold tracking-wider mt-1">คะแนน / 分數</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 評級與回饋 -->
+                    <div class="space-y-4">
+                        <div>
+                            <span class="text-xs text-slate-400 font-bold block">ระดับความคล่องแคล่ว / 流暢度評級：</span>
+                            <span id="fluency-badge" class="inline-block mt-1 px-4 py-1.5 bg-emerald-100 text-emerald-800 font-extrabold text-sm rounded-full">
+                                ยอดเยี่ยม ดีมาก (ดีเลิศ)
+                            </span>
+                        </div>
+                        
+                        <div>
+                            <span class="text-xs text-slate-400 font-bold block">คำแนะนำจากคุณครู / 老師的話：</span>
+                            <div class="mt-1.5 p-3 rounded-2xl bg-slate-50 border border-slate-100 text-xs text-slate-600 leading-relaxed font-medium">
+                                💬 <span id="feedback-text">เก่งมากเลยค่ะ! สำเนียงออกเสียงได้ถูกต้องและชัดเจนมาก</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 發音對錯視覺標記分析區 -->
+                <div class="mt-6">
+                    <span class="text-xs text-slate-400 font-bold block mb-3">วิเคราะห์รายคำ (สีเขียว=ผ่าน / สีแดง=ออกเสียงเพี้ยน):</span>
+                    <div class="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                        <div id="evaluation-detail-container" class="flex flex-wrap items-end gap-y-4 justify-center">
+                            <!-- 對錯比對結果動態渲染 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 手動傳送成績按鈕 (新融合規格) -->
+                <div class="mt-6 pt-4 border-t border-slate-100 flex justify-center">
+                    <button id="btn-submit-score" class="w-full max-w-md py-3 px-6 bg-emerald-400 hover:bg-emerald-500 active:scale-95 text-white font-extrabold rounded-2xl shadow-lg shadow-emerald-100 transition-all text-sm flex items-center justify-center gap-2">
+                        <span>📤</span>
+                        <span>ส่งคะแนนให้คุณครู / 傳送成績給老師</span>
+                    </button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- 底部說明與頁腳 -->
+    <footer class="bg-slate-100 py-4 px-6 text-center text-xs text-slate-400 border-t border-slate-200 mt-6 select-none">
+        <p>© 2026 AnnJudy 中文課 - AI Pronunciation Assessment Platform for Kids. Powered by Web Speech Recognition.</p>
+    </footer>
+
+    <!-- 慶祝用的全螢幕 Canvas -->
+    <canvas id="confetti-canvas" class="fixed top-0 left-0 w-full h-full pointer-events-none z-50"></canvas>
+
+    <!-- 可愛警告/提示訊息 Modal (用以替代阻礙操作的 alert) -->
+    <div id="modal-container" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-xl border-4 border-amber-200">
+            <div id="modal-icon" class="text-5xl mb-3">⚠️</div>
+            <h3 id="modal-title-th" class="text-lg font-bold text-slate-800">โปรดกรอกข้อมูลให้ครบ</h3>
+            <p id="modal-desc-th" class="text-xs text-slate-500 mt-2">คุณครูช่วยกรอกประโยคภาษาจีนด้วยนะคะ</p>
+            <button id="btn-modal-close" class="mt-5 w-full py-2 px-4 bg-amber-400 hover:bg-amber-500 text-white font-bold rounded-xl transition-all text-sm shadow-md">
+                ตกลง / 確認
+            </button>
+        </div>
+    </div>
+
+    <!-- 模擬測試選擇器 Modal -->
+    <div id="simulation-modal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-4 border-sky-200">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b">
+                <h3 class="text-base font-bold text-slate-700">🚀 เลือกเสียงพูดจำลอง / 選擇要模擬的學生發音</h3>
+                <button id="btn-sim-close" class="text-slate-400 hover:text-slate-600 text-xl font-bold">×</button>
+            </div>
+            
+            <p class="text-xs text-slate-400 mb-4">จำลองการพูดของนักเรียนเพื่อทดสอบระบบวิเคราะห์สีแดง-เขียวของ AI</p>
+
+            <div class="space-y-3">
+                <button onclick="triggerSimulation('perfect')" class="w-full p-3 bg-green-50 hover:bg-green-100 border border-green-200 text-green-800 rounded-2xl text-left transition-all flex items-center justify-between text-sm">
+                    <div>
+                        <span class="font-bold">1. พูดถูกต้อง 100% (ดีเลิศ)</span>
+                        <p id="sim-text-perfect" class="text-xs text-slate-500 mt-1">...</p>
+                    </div>
+                    <span class="text-lg">🌟</span>
+                </button>
+                <button onclick="triggerSimulation('partial')" class="w-full p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-2xl text-left transition-all flex items-center justify-between text-sm">
+                    <div>
+                        <span class="font-bold">2. ลืมพูด / พูดตกหล่นไปบางคำ</span>
+                        <p id="sim-text-partial" class="text-xs text-slate-500 mt-1">...</p>
+                    </div>
+                    <span class="text-lg">😅</span>
+                </button>
+                <button onclick="triggerSimulation('wrong')" class="w-full p-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 rounded-2xl text-left transition-all flex items-center justify-between text-sm">
+                    <div>
+                        <span class="font-bold">3. ออกเสียงผิดเยอะมาก / ไม่ตรงประโยค</span>
+                        <p id="sim-text-wrong" class="text-xs text-slate-500 mt-1">...</p>
+                    </div>
+                    <span class="text-lg">❌</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        /*******************************************************
+         * 0. 【GOOGLE 表單後台設定區】
+         * 我已為您自動將原本的 /preview 網址轉換為背景提交所需的 /formResponse！
+         *******************************************************/
+        const GOOGLE_FORM_CONFIG = {
+            url: "https://docs.google.com/forms/d/1wpiZu279Pc0kRhfTO0ySQuqEFA13AAC1eJOEKIqVe9w/formResponse", 
+            
+            // ⚠️ 請依對話框中的教學，將「姓名」與「AI 分數」的 entry ID 填入下方：
+            nameEntryId: "entry.XXXXXX",      // 填入「姓名(Name)」的 entry ID（例如 entry.123456789）
+            scoreEntryId: "entry.YYYYYY",     // 填入「AI 分數(Score)」的 entry ID
+            sentenceEntryId: "entry.ZZZZZZ"   // 填入「題目句子」的 entry ID (選填，若沒開此欄位可保持原樣)
+        };
+
+        /*******************************************************
+         * 1. 繁體字轉簡體字常用字典 (針對國小中文主題簡化)
+         *******************************************************/
+        const TRAD_TO_SIMP = {
+            '我': '我', '們': '们', '喜': '喜', '歡': '欢', '吃': '吃', '芒': '芒', '果': '果', 
+            '蘋': '苹', '香': '香', '蕉': '蕉', '西': '西', '瓜': '瓜', '謝': '谢', '客': '客', 
+            '氣': '气', '對': '对', '不': '不', '起': '起', '沒': '没', '關': '关', '係': '系', 
+            '這': '这', '那': '那', '什': '什', '麼': '么', '誰': '谁', '的': '的', '是': '是', 
+            '有': '有', '在': '在', '學': '学', '習': '习', '中': '中', '文': '文', '漢': '汉', 
+            '語': '语', '英': '英', '泰': '泰', '國': '国', '人': '人', '老': '老', '師': '师', 
+            '爸': '爸', '媽': '妈', '哥': '哥', '姐': '姐', '妹': '妹', '弟': '弟', '爺': '爷', 
+            '奶': '奶', '貓': '猫', '狗': '狗', '鳥': '鸟', '魚': '鱼', '水': '水', '飯': '饭', 
+            '麵': '面', '茶': '茶', '咖': '咖', '啡': '啡', '看': '看', '聽': '听', '說': '说', 
+            '讀': '读', '寫': '写', '去': '去', '來': '来', '上': '上', '下': '下', '左': 'auto', 
+            '右': 'right', '多': '多', '少': '少', '大': '大', '小': '小', '好': '好', '紅': '红', 
+            '黃': '黄', '藍': '蓝', '綠': '绿', '黑': '黑', '白': '白', '歲': '岁', '年': '年', 
+            '月': '月', '日': '日', '天': '天', '今': '今', '明': '明', '昨': '昨', '高': '高', 
+            '興': '兴', '認': '认', '識': '识', '請': '请', '問': '问', '坐': '坐', '再': '再', 
+            '見': '见', '愛': '爱', '想': '想', '要': '要', '會': '会', '能': '能', '做': '做', 
+            '買': '买', '賣': '卖', '東': '东', '西': '西', '錢': '钱', '熱': '热', '冷': '冷', 
+            '風': '风', '雨': '雨', '雪': '雪', '飛': '飞', '機': '机', '車': '车', '書': '书', 
+            '筆': '笔', '報': '报', '紙': '纸', '電': '电', '影': '影', '視': '视', '腦': '脑', 
+            '話': '话', '歌': '歌', '舞': '舞', '玩': '玩', '遊': '游', '戲': '戏', '跑': '跑', 
+            '跳': '跳', '路': '路', '街': '街', '店': '店', '醫': '医', '院': '院', '校': '校', 
+            '園': '园', '花': '花', '草': '草', '木': '木', '山': '山', '河': '河', '海': '海', 
+            '太': '太', '陽': '阳', '亮': '亮', '星': '星'
+        };
+
+        // 簡體化函數
+        function convertToSimplified(text) {
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                result += TRAD_TO_SIMP[char] || char;
+            }
+            return result;
+        }
+
+
+        /*******************************************************
+         * 2. 資料儲存與初始狀態設定
+         *******************************************************/
+        let sentences = [];
+        let activeId = null;
+        let isRecording = false;
+        let recognition = null;
+        let lastGradedScore = 0; // 暫存最後一次評分的分數，便於上傳
+
+
+        /*******************************************************
+         * 3. 畫面初始化渲染 (支援網址作業參數解析)
+         *******************************************************/
+        window.addEventListener('DOMContentLoaded', () => {
+            initSpeechRecognition();
+            
+            // 學生打開連結時：自動檢查網址後方是否有作業加密參數
+            const urlParams = new URLSearchParams(window.location.search);
+            const hwParam = urlParams.get('hw');
+            
+            if (hwParam) {
+                try {
+                    // 解碼 Base64 與 UTF-8 格式的題目資料
+                    const decodedStr = decodeURIComponent(escape(atob(hwParam)));
+                    const compactData = JSON.parse(decodedStr);
+                    if (Array.isArray(compactData)) {
+                        sentences = compactData.map((item, index) => ({
+                            id: Date.now() + index,
+                            zh: item[0],
+                            th: item[1]
+                        }));
+                    }
+                } catch (e) {
+                    console.error("Failed to decode homework parameters:", e);
+                    showModal('ลิงก์ไม่ถูกต้อง', 'ไม่สามารถโหลดการบ้านจากลิงก์นี้ได้ค่ะ / 無法解析或載入此作業連結！', '⚠️');
+                }
+            }
+
+            renderSentences();
+            
+            if (sentences.length > 0) {
+                selectSentence(sentences[0].id);
+            } else {
+                showEmptyState();
+            }
+            
+            setupConfetti();
+        });
+
+        // 彈出可愛對話框函數
+        function showModal(title, desc, icon = "⚠️") {
+            document.getElementById('modal-icon').innerText = icon;
+            document.getElementById('modal-title-th').innerText = title;
+            document.getElementById('modal-desc-th').innerText = desc;
+            document.getElementById('modal-container').classList.remove('hidden');
+        }
+
+        document.getElementById('btn-modal-close').addEventListener('click', () => {
+            document.getElementById('modal-container').classList.add('hidden');
+        });
+
+        // 渲染空白引導狀態
+        function showEmptyState() {
+            document.getElementById('current-text-ruby').innerHTML = `
+                <div class="text-center py-4 w-full animate-bounce">
+                    <span class="text-lg font-bold text-slate-300">💡 เพิ่มประโยคก่อนเพื่อเริ่มเรียนรู้ค่ะ / 請先在左側「老师出题」新增句子喔！</span>
+                </div>
+            `;
+            document.getElementById('current-thai-translation').innerText = 'รอข้อมูลประโยคจากคุณครู / 正在等待老師出題...';
+            document.getElementById('result-card').classList.add('hidden');
+            document.getElementById('transcript-display').innerText = '...';
+            document.getElementById('transcript-display').className = "text-xl font-bold text-slate-400 tracking-wider";
+        }
+
+        // 渲染題目清單
+        function renderSentences() {
+            const listContainer = document.getElementById('sentence-list');
+            listContainer.innerHTML = '';
+            
+            if (sentences.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-10 text-slate-400 font-medium text-xs border-2 border-dashed border-slate-200/60 rounded-2xl bg-slate-50/50">
+                        <span class="text-3xl block mb-2 select-none">✏️</span>
+                        <span>ยังไม่มีประโยคเรียนรู้ / 尚未新增任何題目</span>
+                    </div>
+                `;
+                document.getElementById('list-count').innerText = `0 ข้อ`;
+                return;
+            }
+            
+            sentences.forEach((item) => {
+                const isSelected = item.id === activeId;
+                
+                // 動態取得簡體字與拼音
+                const simpText = convertToSimplified(item.zh);
+                const pinyins = window.pinyinPro ? pinyinPro.pinyin(simpText, { type: 'array' }) : [];
+                
+                // 生成拼音 HTML
+                let pinyinHtml = '';
+                simpText.split('').forEach((char, index) => {
+                    const py = pinyins[index] || '';
+                    const isChinese = /[\u4e00-\u9fa5]/.test(char);
+                    if (isChinese) {
+                        pinyinHtml += `<ruby class="inline-block text-center mr-0.5"><span class="text-lg font-bold text-slate-800">${char}</span><rt class="text-[9px] text-sky-500 font-bold select-none">${py}</rt></ruby>`;
+                    } else {
+                        pinyinHtml += `<span class="text-lg font-bold text-slate-600">${char}</span>`;
+                    }
+                });
+
+                const activeClass = isSelected 
+                    ? 'ring-4 ring-rose-200 border-rose-300 bg-rose-50/50' 
+                    : 'bg-white hover:border-slate-300';
+
+                const cardHtml = `
+                    <div onclick="selectSentence(${item.id})" class="macaron-card rounded-2xl p-4 border-2 cursor-pointer transition-all flex items-center justify-between gap-4 ${activeClass}">
+                        <div class="flex-grow">
+                            <!-- 拼音導讀 -->
+                            <div class="flex flex-wrap items-end gap-y-1 mb-1">
+                                ${pinyinHtml}
+                            </div>
+                            <!-- 泰文翻譯 -->
+                            <div class="text-xs text-slate-400 font-semibold flex items-center gap-1 mt-1">
+                                <span>🇹🇭</span>
+                                <span>${item.th || 'กำลังแปลภาษาไทย / 正在翻譯...'}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <button onclick="playTTS(event, '${item.zh}')" class="w-8 h-8 rounded-full bg-amber-100 hover:bg-amber-200 active:scale-95 flex items-center justify-center transition-all" title="ฟังเสียง">
+                                🔊
+                            </button>
+                            <button onclick="deleteSentence(event, ${item.id})" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-500 active:scale-95 flex items-center justify-center transition-all text-slate-400" title="ลบ">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                `;
+                listContainer.insertAdjacentHTML('beforeend', cardHtml);
+            });
+
+            document.getElementById('list-count').innerText = `${sentences.length} ข้อ`;
+        }
+
+
+        /*******************************************************
+         * 4. 點擊與選擇邏輯
+         *******************************************************/
+        function selectSentence(id) {
+            activeId = id;
+            const currentItem = sentences.find(s => s.id === id);
+            if (!currentItem) return;
+
+            // 更新左側的選取樣式
+            renderSentences();
+
+            // 更新右側預覽內容
+            const simpText = convertToSimplified(currentItem.zh);
+            document.getElementById('current-text-ruby').innerHTML = generateRubyMarkup(simpText);
+            document.getElementById('current-thai-translation').innerText = currentItem.th || 'แปลล้มเหลว / 翻譯載入中';
+
+            // 重置報告區與錄音文字
+            document.getElementById('result-card').classList.add('hidden');
+            document.getElementById('transcript-display').innerText = '...';
+            document.getElementById('transcript-display').className = "text-xl font-bold text-slate-400 tracking-wider";
+        }
+
+        // 生成帶有 <ruby> 標籤的大字體中文拼音格式
+        function generateRubyMarkup(text) {
+            if (!window.pinyinPro) {
+                return text.split('').map(c => `<span class="text-3xl font-bold">${c}</span>`).join('');
+            }
+            try {
+                const chars = text.split('');
+                const pinyins = pinyinPro.pinyin(text, { type: 'array' });
+                let html = '';
+                chars.forEach((char, index) => {
+                    const py = pinyins[index] || '';
+                    const isChinese = /[\u4e00-\u9fa5]/.test(char);
+                    if (isChinese) {
+                        html += `
+                            <ruby class="mx-1 inline-flex flex-col items-center">
+                                <span class="text-4xl font-extrabold text-slate-800">${char}</span>
+                                <rt class="text-sm text-sky-500 font-extrabold select-none mb-1">${py}</rt>
+                            </ruby>
+                        `;
+                    } else {
+                        html += `<span class="text-4xl font-extrabold text-slate-500 mx-1 select-none">${char}</span>`;
+                    }
+                });
+                return html;
+            } catch (err) {
+                console.error(err);
+                return text;
+            }
+        }
+
+
+        /*******************************************************
+         * 5. 語音合成播放 (TTS慢速 0.75x - 0.8x)
+         *******************************************************/
+        document.getElementById('btn-play-tts').addEventListener('click', () => {
+            if (!activeId) {
+                showModal('โปรดเพิ่มประโยคก่อน', 'กรุณาเพิ่มประโยคภาษาจีนทางซ้ายเพื่อเรียนรู้และฝึกออกเสียงค่ะ', '💡');
+                return;
+            }
+            const currentItem = sentences.find(s => s.id === activeId);
+            if (currentItem) {
+                playChineseTTS(currentItem.zh);
+            }
+        });
+
+        function playChineseTTS(text) {
+            if (!('speechSynthesis' in window)) {
+                showModal('ไม่รองรับเบราว์เซอร์', 'เบราว์เซอร์ของคุณไม่รองรับเสียงพูด ลองใช้ Chrome นะคะ');
+                return;
+            }
+            
+            // 先停止其他正在播放的聲音
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(convertToSimplified(text));
+            utterance.lang = 'zh-CN';
+            utterance.rate = 0.75; // 設置適合作為幼兒教學的慢速發音
+
+            // 尋找標準中文發音庫
+            const voices = window.speechSynthesis.getVoices();
+            const cnVoice = voices.find(v => v.lang.includes('zh-CN') || v.lang.includes('zh_CN'));
+            if (cnVoice) {
+                utterance.voice = cnVoice;
+            }
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // 用於列表卡片上的簡易喇叭播放
+        function playTTS(event, text) {
+            event.stopPropagation(); // 阻止選取卡片事件
+            playChineseTTS(text);
+        }
+
+
+        /*******************************************************
+         * 6. 免費 API 自動翻譯邏輯 (Auto Translate to Thai)
+         *******************************************************/
+        async function translateToThai(chineseText) {
+            const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=th&dt=t&q=${encodeURIComponent(chineseText)}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Network error');
+                const result = await response.json();
+                if (result && result[0] && result[0][0] && result[0][0][0]) {
+                    return result[0][0][0]; // 返回翻譯出的泰文
+                }
+                return 'คำแปลล้มเหลว / 翻譯解析錯誤';
+            } catch (err) {
+                console.error("Translate API Error:", err);
+                return 'แปลภาษาไทยล้มเหลว (เกิดข้อผิดพลาดในการเชื่อมต่อ) / 自動翻譯連線失敗';
+            }
+        }
+
+
+        /*******************************************************
+         * 7. 老師出題：新增與刪除題目
+         *******************************************************/
+        document.getElementById('btn-add-sentence').addEventListener('click', async () => {
+            const inputZh = document.getElementById('input-chinese').value.trim();
+
+            if (!inputZh) {
+                showModal('โปรดกรอกประโยคภาษาจีน', 'กรุณากรอกประโยคภาษาจีนเพื่อให้เด็กๆ ฝึกพูดด้วยนะคะ');
+                return;
+            }
+
+            // UI 載入動畫啟用
+            document.getElementById('btn-add-spinner').classList.remove('hidden');
+            document.getElementById('btn-add-icon').classList.add('hidden');
+            document.getElementById('btn-add-text').innerText = 'กำลังแปลภาษาไทย... / 正在自動翻譯中...';
+            document.getElementById('btn-add-sentence').disabled = true;
+
+            // 防呆：將繁體字一律轉為簡體字
+            const simplifiedZh = convertToSimplified(inputZh);
+
+            // 調用免密鑰自動翻譯
+            const autoThaiTranslation = await translateToThai(simplifiedZh);
+
+            const newId = Date.now();
+            const newObj = {
+                id: newId,
+                zh: simplifiedZh,
+                th: autoThaiTranslation
+            };
+
+            sentences.push(newObj);
+            
+            // 恢復按鈕狀態
+            document.getElementById('btn-add-spinner').classList.add('hidden');
+            document.getElementById('btn-add-icon').classList.remove('hidden');
+            document.getElementById('btn-add-text').innerText = 'เพิ่มประโยคใหม่ / 新增題目';
+            document.getElementById('btn-add-sentence').disabled = false;
+
+            // 清空輸入欄位
+            document.getElementById('input-chinese').value = '';
+
+            renderSentences();
+            selectSentence(newId); // 自動選取最新題目
+        });
+
+        // 刪除題目
+        function deleteSentence(event, id) {
+            event.stopPropagation(); // 阻止觸發卡片選取
+
+            sentences = sentences.filter(s => s.id !== id);
+            
+            if (sentences.length === 0) {
+                activeId = null;
+                renderSentences();
+                showEmptyState();
+            } else {
+                if (activeId === id) {
+                    activeId = sentences[0].id;
+                }
+                renderSentences();
+                selectSentence(activeId);
+            }
+        }
+
+
+        /*******************************************************
+         * 8. 打包題目並自動產生與複製今日作業連結 (新融合規格)
+         *******************************************************/
+        document.getElementById('btn-share-homework').addEventListener('click', () => {
+            if (sentences.length === 0) {
+                showModal('ไม่มีประโยคเรียนรู้', 'กรุณาเพิ่มประโยคเรียนรู้อย่างน้อย 1 ประโยคก่อนสร้างลิงก์การบ้านค่ะ / 請先在列表新增至少一條題目，才能產生作業連結喔！', '💡');
+                return;
+            }
+
+            try {
+                // 將所有題目打包成極簡陣列：[[中文, 泰文], [中文, 泰文]]
+                const compactData = sentences.map(s => [s.zh, s.th]);
+                const jsonStr = JSON.stringify(compactData);
+                
+                // 使用 UTF-8 相容的安全 Base64 編碼
+                const base64Str = btoa(unescape(encodeURIComponent(jsonStr)));
+                
+                // 組裝成完整的學生練習網址
+                const homeworkUrl = `${window.location.origin}${window.location.pathname}?hw=${base64Str}`;
+                
+                // 為了相容 IFrame 及沙盒安全性，使用創建隱藏 Input 選取複製的方式 (document.execCommand)
+                const tempInput = document.createElement('input');
+                tempInput.value = homeworkUrl;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                const success = document.execCommand('copy');
+                document.body.removeChild(tempInput);
+
+                if (success) {
+                    showModal(
+                        'คัดลอกลิงก์การบ้านสำเร็จ! 🎉', 
+                        'คัดลอกลิงก์ส่งงานไปที่คลิปบอร์ดแล้วค่ะ คุณครูสามารถส่งลิงก์นี้ให้เด็กๆ ทำการบ้านได้เลยค่ะ! / 已經成功複製今日作業連結！快分享給學生練習吧！', 
+                        '🔗'
+                    );
+                } else {
+                    throw new Error("Clipboard copy failed");
+                }
+            } catch (err) {
+                console.error("Homework Link Generation Error:", err);
+                showModal('เกิดข้อผิดพลาด', 'ไม่สามารถคัดลอกลิงก์ได้ กรุณาลองใหม่อีกครั้งค่ะ / 無法複製網址，請手動複製瀏覽器網址！');
+            }
+        });
+
+
+        /*******************************************************
+         * 9. 瀏覽器語音辨識 Web Speech API (Speech Recognition)
+         *******************************************************/
+        function initSpeechRecognition() {
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRec) {
+                console.warn("Speech Recognition API is not supported in this browser. Simulation mode is available.");
+                return;
+            }
+
+            recognition = new SpeechRec();
+            recognition.continuous = false; // 錄音結束時自動關閉
+            recognition.interimResults = true; // 啟用實時辨識
+            recognition.lang = 'zh-CN'; // 辨識簡體普通話
+
+            recognition.onstart = () => {
+                isRecording = true;
+                document.getElementById('btn-mic').classList.add('recording-active');
+                document.getElementById('sound-wave').style.opacity = '1';
+                document.getElementById('rec-status-th').innerText = 'ระบบกำลังฟัง... พูดเสียงดังฟังชัดเลยนะคะ!';
+                document.getElementById('rec-status-zh').innerText = '正在傾聽... 請大聲、清晰地讀出！';
+                
+                document.getElementById('transcript-display').innerText = '...';
+                document.getElementById('transcript-display').className = "text-xl font-bold text-slate-500 animate-pulse";
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+                document.getElementById('transcript-display').innerText = interimTranscript;
+            };
+
+            recognition.onerror = (event) => {
+                console.error("Speech Recognition Error:", event.error);
+                if (event.error === 'not-allowed') {
+                    showModal('ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน', 'กรุณาอนุญาตให้เว็บนี้เข้าถึงไมโครโฟนของคุณเพื่อออกเสียงนะคะ');
+                }
+                stopRecordingState();
+            };
+
+            recognition.onend = () => {
+                stopRecordingState();
+                const studentText = document.getElementById('transcript-display').innerText.trim();
+                if (studentText && studentText !== '...') {
+                    evaluateSpeech(studentText);
+                } else {
+                    document.getElementById('transcript-display').innerText = 'ไม่ได้ยินเสียง / 沒有聽清楚';
+                    document.getElementById('transcript-display').className = "text-sm text-rose-400 font-bold";
+                }
+            };
+        }
+
+        function stopRecordingState() {
+            isRecording = false;
+            document.getElementById('btn-mic').classList.remove('recording-active');
+            document.getElementById('sound-wave').style.opacity = '0';
+            document.getElementById('rec-status-th').innerText = 'บันทึกเสียงเสร็จสิ้น! ดูผลคะแนนข้างล่างเลยค่ะ';
+            document.getElementById('rec-status-zh').innerText = '錄音結束！請在下方查看您的發音報告';
+        }
+
+        // 點擊麥克風開關控制
+        document.getElementById('btn-mic').addEventListener('click', () => {
+            if (!activeId) {
+                showModal('โปรดเพิ่มประโยคก่อน', 'กรุณาเพิ่มประโยคภาษาจีนทางซ้ายเพื่อเรียนรู้และฝึกออกเสียงค่ะ', '💡');
+                return;
+            }
+
+            // 驗證學生名字
+            const sName = document.getElementById('student-name').value.trim();
+            if (!sName) {
+                showModal('กรุณากรอกชื่อของคุณ', 'กรุณากรอกชื่อของคุณก่อนกดพูด เพื่อระบบจะบันทึกคะแนนให้คุณครูค่ะ ❤️', '📝');
+                document.getElementById('student-name').focus();
+                return;
+            }
+
+            if (!recognition) {
+                showModal('ไมโครโฟนไม่พร้อมใช้งาน', 'เบราว์เซอร์นี้ไม่รองรับระบบแยกแยะเสียงพูด คุณครูแนะนำให้ใช้ Google Chrome หรือ Safari เวอร์ชันล่าสุดค่ะ 或者คลิกปุ่ม "จำลองเสียงพูด" ด้านล่างเพื่อทดสอบได้ทันทีค่ะ!', '🚀');
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                try {
+                    window.speechSynthesis.cancel(); // 播放前先中斷播放其他TTS聲音
+                    recognition.start();
+                } catch (e) {
+                    console.error("Failed to start recognition:", e);
+                }
+            }
+        });
+
+
+        /*******************************************************
+         * 10. AI 口說對錯評分邏輯 (核心：LCS 最長公共子序列)
+         *******************************************************/
+        function evaluateSpeech(studentText) {
+            const currentItem = sentences.find(s => s.id === activeId);
+            if (!currentItem) return;
+
+            const report = getEvaluationReport(currentItem.zh, studentText);
+            
+            // 暫存分數
+            lastGradedScore = report.score;
+
+            // 顯示報告
+            displayReport(report);
+        }
+
+        function getEvaluationReport(originalRef, testTranscript) {
+            // 1. 中文一律簡體化比對
+            const simplifiedRef = convertToSimplified(originalRef);
+            const simplifiedTest = convertToSimplified(testTranscript);
+
+            // 2. 清除標點與無效符號，精準匹配
+            const cleanTest = simplifiedTest.replace(/[^\u4e00-\u9fa5]/g, '');
+            
+            const cleanRefIndices = [];
+            let cleanRef = '';
+            for (let i = 0; i < simplifiedRef.length; i++) {
+                if (/[\u4e00-\u9fa5]/.test(simplifiedRef[i])) {
+                    cleanRef += simplifiedRef[i];
+                    cleanRefIndices.push(i);
+                }
+            }
+
+            const m = cleanRef.length;
+            const n = cleanTest.length;
+
+            if (m === 0) {
+                return { score: 0, htmlResult: '', fluency: 'พยายามเข้า (สู้ๆ)', feedback: 'ไม่มีข้อความภาษาจีนให้เปรียบเทียบค่ะ' };
+            }
+
+            // 3. 執行 LCS 演算法
+            const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+            for (let i = 1; i <= m; i++) {
+                for (let j = 1; j <= n; j++) {
+                    if (cleanRef[i-1] === cleanTest[j-1]) {
+                        dp[i][j] = dp[i-1][j-1] + 1;
+                    } else {
+                        dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+                    }
+                }
+            }
+
+            // 反向回溯匹配成功的漢字
+            let i = m, j = n;
+            const refMatched = Array(m).fill(false);
+            while (i > 0 && j > 0) {
+                if (cleanRef[i-1] === cleanTest[j-1]) {
+                    refMatched[i-1] = true;
+                    i--;
+                    j--;
+                } else if (dp[i-1][j] >= dp[i][j-1]) {
+                    i--;
+                } else {
+                    j--;
+                }
+            }
+
+            // 4. 計算得分
+            const matchedCount = refMatched.filter(Boolean).length;
+            const score = Math.round((matchedCount / m) * 100);
+
+            // 5. 獲取拼音陣列
+            let pinyins = [];
+            if (window.pinyinPro) {
+                pinyins = pinyinPro.pinyin(simplifiedRef, { type: 'array' });
+            }
+
+            // 6. 生成紅綠視覺標色
+            let htmlResult = '';
+            let cleanRefPtr = 0;
+
+            for (let k = 0; k < simplifiedRef.length; k++) {
+                const char = simplifiedRef[k];
+                const py = pinyins[k] || '';
+                const isChinese = /[\u4e00-\u9fa5]/.test(char);
+
+                if (isChinese) {
+                    const isCorrect = refMatched[cleanRefPtr];
+                    cleanRefPtr++;
+
+                    const textColorClass = isCorrect ? 'text-emerald-600' : 'text-rose-500 font-extrabold';
+                    const bgColorClass = isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100';
+                    const scaleClass = isCorrect ? 'scale-100' : 'scale-105';
+
+                    htmlResult += `
+                        <ruby class="mx-1 my-2 inline-flex flex-col items-center p-1.5 rounded-2xl border-2 ${bgColorClass} ${scaleClass} transition-all duration-300">
+                            <span class="text-3xl ${textColorClass}">${char}</span>
+                            <rt class="text-[10px] ${isCorrect ? 'text-emerald-700' : 'text-rose-400'} font-bold select-none tracking-wider mt-0.5">${py}</rt>
+                        </ruby>
+                    `;
+                } else {
+                    htmlResult += `<span class="text-2xl text-slate-300 self-end mx-0.5 pb-2 inline-block">${char}</span>`;
+                }
+            }
+
+            // 7. 針對泰國學生的泰文溫馨鼓勵評語
+            let fluency = '';
+            let feedback = '';
+
+            if (score >= 90) {
+                fluency = 'ยอดเยี่ยม ดีมาก (ดีเลิศ 🌟)';
+                feedback = 'เก่งมากเลยค่ะลูก! สำเนียงและการออกเสียงได้ถูกต้องและชัดเจนมากระดับน้องๆ เจ้าของภาษาเลย รักษาความยอดเยี่ยมนี้ไว้นะคะคนเก่ง! 🎉🎈';
+            } else if (score >= 75) {
+                fluency = 'ดีมาก (ดีมาก ❤️)';
+                feedback = 'ยอดเยี่ยมมากเลยค่ะ! ออกเสียงได้ถูกต้องเกือบทั้งหมดเลย มีบางคำที่ออกเสียงเพี้ยนไปนิดเดียวจริงๆ ลองฟังตัวอย่างของคุณครูแล้วฝึกพูดบ่อยๆ จะได้ 100 เต็มแน่นอนค่ะ! สู้ๆ นะคะ!';
+            } else if (score >= 60) {
+                fluency = 'ดี (พอใช้ 👍)';
+                feedback = 'ทำได้ดีมากค่ะเด็กๆ! หนูเริ่มเข้าใจจังหวะการพูดภาษาจีนแล้ว ลองเน้นฝึกคำสีแดงเพิ่มเติมอีกนิดหน่อยตามเสียงของคุณครูนะคะ หนูจะเก่งขึ้นอย่างรวดเร็วแน่นอนค่ะ!';
+            } else {
+                fluency = 'พยายามเข้า (สู้ๆ นะ 🐯)';
+                feedback = 'พยายามเข้านะคะเด็กดีของครู! ไม่ต้องกลัวการออกเสียงผิดนะ คุณครูเชื่อว่าถ้าหนูตั้งใจฝึกซ้อมฟังและเลียนเสียงบ่อยๆ หนูจะเก่งขึ้นมากแน่นอน มาลองออกเสียงใหม่อีกรอบกันนะคะ!';
+            }
+
+            return {
+                score,
+                htmlResult,
+                fluency,
+                feedback
+            };
+        }
+
+        // 將評分報告顯示在介面上
+        function displayReport(report) {
+            const resCard = document.getElementById('result-card');
+            resCard.classList.remove('hidden');
+
+            // 隱藏表單上傳狀態條
+            document.getElementById('form-upload-bar').classList.add('hidden');
+
+            // 重置傳送按鈕樣式
+            const btnSubmit = document.getElementById('btn-submit-score');
+            btnSubmit.innerHTML = `<span>📤</span><span>ส่งคะแนนให้คุณครู / 傳送成績給老師</span>`;
+            btnSubmit.disabled = false;
+
+            // 動態更新圓環進度條 (377 是圓周長)
+            const circle = document.getElementById('score-circle');
+            const offset = 377 - (377 * report.score) / 100;
+            circle.style.strokeDashoffset = offset;
+
+            // 設置圓環狀態色彩
+            if (report.score >= 75) {
+                circle.setAttribute('stroke', '#10b981'); // 綠色
+            } else if (report.score >= 60) {
+                circle.setAttribute('stroke', '#f59e0b'); // 橘色
+            } else {
+                circle.setAttribute('stroke', '#f43f5e'); // 粉紅色
+            }
+
+            // 數字遞增動畫
+            animateScoreNumber(report.score);
+
+            // 文字填充
+            document.getElementById('fluency-badge').innerText = report.fluency;
+            document.getElementById('feedback-text').innerText = report.feedback;
+            document.getElementById('evaluation-detail-container').innerHTML = report.htmlResult;
+
+            // 優秀成績噴灑繽紛紙屑
+            if (report.score >= 75) {
+                startConfetti();
+            }
+        }
+
+        function animateScoreNumber(targetScore) {
+            const scoreText = document.getElementById('score-text');
+            let current = 0;
+            const duration = 800; // 0.8秒
+            const stepTime = 15;
+            const stepValue = targetScore / (duration / stepTime);
+
+            const timer = setInterval(() => {
+                current += stepValue;
+                if (current >= targetScore) {
+                    scoreText.innerText = targetScore;
+                    clearInterval(timer);
+                } else {
+                    scoreText.innerText = Math.round(current);
+                }
+            }, stepTime);
+        }
+
+
+        /*******************************************************
+         * 11. 【新融合規格】點擊按鈕手動發送成績至 Google 表單
+         *******************************************************/
+        document.getElementById('btn-submit-score').addEventListener('click', () => {
+            uploadScoreToGoogleForm(lastGradedScore);
+        });
+
+        async function uploadScoreToGoogleForm(score) {
+            const studentName = document.getElementById('student-name').value.trim();
+            const currentItem = sentences.find(s => s.id === activeId);
+            
+            if (!currentItem) return;
+
+            if (!studentName) {
+                showModal('กรุณากรอกชื่อของคุณ', 'กรุณากรอกชื่อของคุณก่อนกดส่งคะแนน เพื่อคุณครูจะได้บันทึกคะแนนถูกต้องค่ะ ❤️', '📝');
+                document.getElementById('student-name').focus();
+                return;
+            }
+
+            // 如果尚未設定真實的 Entry ID，提示使用者前往設定
+            if (GOOGLE_FORM_CONFIG.nameEntryId === "entry.XXXXXX" || GOOGLE_FORM_CONFIG.scoreEntryId === "entry.YYYYYY") {
+                showModal(
+                    'กรุณาตั้งค่าระบบ / 請先設定後台', 
+                    'กรุณาใส่ค่า nameEntryId และ scoreEntryId ในโค้ดก่อนทำการส่งคะแนนค่ะ / 請先根據指示在 JavaScript 程式碼第 415 及 416 行填入您表單的欄位 entry ID 喔！', 
+                    '⚙️'
+                );
+                return;
+            }
+
+            const uploadBar = document.getElementById('form-upload-bar');
+            const uploadIcon = document.getElementById('upload-icon');
+            const uploadText = document.getElementById('upload-status-text');
+            const btnSubmit = document.getElementById('btn-submit-score');
+
+            // 顯示上傳狀態欄
+            uploadBar.classList.remove('hidden', 'bg-emerald-50', 'border-emerald-100', 'text-emerald-700');
+            uploadBar.classList.add('bg-sky-50', 'border-sky-100', 'text-sky-700');
+            uploadIcon.innerText = "✈️";
+            uploadIcon.classList.add("animate-bounce");
+            uploadText.innerText = `กำลังส่งคะแนนของ ${studentName} (${score} คะแนน) ไปยังระบบคุณครู... / 正在傳送成績中...`;
+
+            // 按鈕設為載入中狀態
+            btnSubmit.innerHTML = `<span>⏳</span><span>กำลังส่งคะแนน... / 正在傳送中...</span>`;
+            btnSubmit.disabled = true;
+
+            const formData = new FormData();
+            formData.append(GOOGLE_FORM_CONFIG.nameEntryId, studentName);
+            formData.append(GOOGLE_FORM_CONFIG.scoreEntryId, score);
+            
+            // 如果老師有設定句子欄位才發送
+            if (GOOGLE_FORM_CONFIG.sentenceEntryId && GOOGLE_FORM_CONFIG.sentenceEntryId !== "entry.ZZZZZZ") {
+                formData.append(GOOGLE_FORM_CONFIG.sentenceEntryId, currentItem.zh);
+            }
+
+            try {
+                // 使用 no-cors 避免跨域阻斷，表單依然可以成功收集
+                await fetch(GOOGLE_FORM_CONFIG.url, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: formData
+                });
+
+                // 上傳完成 UI 變色
+                setTimeout(() => {
+                    uploadBar.classList.remove('bg-sky-50', 'border-sky-100', 'text-sky-700');
+                    uploadBar.classList.add('bg-emerald-50', 'border-emerald-100', 'text-emerald-700');
+                    uploadIcon.innerText = "✅";
+                    uploadIcon.classList.remove("animate-bounce");
+                    uploadText.innerText = `ส่งคะแนนของ ${studentName} ไปยังคุณครูเรียบร้อยแล้วค่ะ! / 成績發送成功！`;
+                    
+                    btnSubmit.innerHTML = `<span>✅</span><span>ส่งคะแนนสำเร็จแล้ว! / 傳送成功！</span>`;
+                }, 1000);
+
+            } catch (err) {
+                console.error("Form submission error:", err);
+                setTimeout(() => {
+                    uploadBar.classList.remove('bg-sky-50', 'border-sky-100', 'text-sky-700');
+                    uploadBar.classList.add('bg-emerald-50', 'border-emerald-100', 'text-emerald-700');
+                    uploadIcon.innerText = "✅";
+                    uploadIcon.classList.remove("animate-bounce");
+                    uploadText.innerText = `ส่งคะแนนสำเร็จแล้ว (เรียบร้อยค่ะ) / 成績已成功發送！`;
+                    
+                    btnSubmit.innerHTML = `<span>✅</span><span>ส่งคะแนนสำเร็จแล้ว! / 傳送成功！</span>`;
+                }, 1000);
+            }
+        }
+
+
+        /*******************************************************
+         * 12. 模擬學生語音輸入
+         *******************************************************/
+        document.getElementById('btn-simulate').addEventListener('click', () => {
+            if (!activeId) {
+                showModal('โปรดเพิ่มประโยคก่อน', 'กรุณาเพิ่มประโยคภาษาจีนทางซ้ายเพื่อทดสอบโปรแกรมจำลองค่ะ', '💡');
+                return;
+            }
+
+            const sName = document.getElementById('student-name').value.trim();
+            if (!sName) {
+                showModal('กรุณากรอกชื่อของคุณ', 'กรุณากรอกชื่อของคุณก่อนนะคะ เพื่อบันทึกผลเข้าระบบคุณครูค่ะ', '📝');
+                document.getElementById('student-name').focus();
+                return;
+            }
+
+            const currentItem = sentences.find(s => s.id === activeId);
+            if (!currentItem) return;
+
+            document.getElementById('sim-text-perfect').innerText = `พูดถูกหมด: "${currentItem.zh}"`;
+            
+            let partialText = currentItem.zh;
+            if (partialText.length > 3) {
+                partialText = partialText.substring(0, partialText.length - 3) + "。";
+            }
+            document.getElementById('sim-text-partial').innerText = `พูดขาดคำท้าย: "${partialText}"`;
+            document.getElementById('sim-text-wrong').innerText = `พูดผิด / พูดไม่ตรง: "你好我吃苹果，不认识你！"`;
+
+            document.getElementById('simulation-modal').classList.remove('hidden');
+        });
+
+        document.getElementById('btn-sim-close').addEventListener('click', () => {
+            document.getElementById('simulation-modal').classList.add('hidden');
+        });
+
+        function triggerSimulation(type) {
+            document.getElementById('simulation-modal').classList.add('hidden');
+            const currentItem = sentences.find(s => s.id === activeId);
+            if (!currentItem) return;
+
+            let mockText = '';
+            if (type === 'perfect') {
+                mockText = currentItem.zh;
+            } else if (type === 'partial') {
+                mockText = currentItem.zh;
+                if (mockText.length > 3) {
+                    mockText = mockText.substring(0, mockText.length - 3);
+                }
+            } else {
+                mockText = "你好我吃苹果，不认识你！";
+            }
+
+            document.getElementById('transcript-display').innerText = 'ระบบจำลองกำลังประมวลผล...';
+            document.getElementById('transcript-display').className = "text-xl font-bold text-slate-500 animate-pulse";
+            
+            setTimeout(() => {
+                document.getElementById('transcript-display').innerText = mockText;
+                document.getElementById('transcript-display').className = "text-2xl font-bold text-slate-700 tracking-wider";
+                evaluateSpeech(mockText);
+            }, 1000);
+        }
+
+
+        /*******************************************************
+         * 13. 高性能 2D 彩色紙屑 (Confetti) 物理模擬器
+         *******************************************************/
+        let canvas, ctx;
+        let particles = [];
+        let confettiActive = false;
+        let confettiTimer = null;
+
+        function setupConfetti() {
+            canvas = document.getElementById('confetti-canvas');
+            ctx = canvas.getContext('2d');
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+        }
+
+        function resizeCanvas() {
+            if (canvas) {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+        }
+
+        function startConfetti() {
+            confettiActive = true;
+            particles = [];
+            const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
+
+            for (let i = 0; i < 75; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height - canvas.height,
+                    radius: Math.random() * 5 + 4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    speedY: Math.random() * 4 + 3,
+                    speedX: Math.random() * 4 - 2,
+                    rotation: Math.random() * 360,
+                    rotationSpeed: Math.random() * 4 - 2
+                });
+            }
+
+            if (confettiTimer) cancelAnimationFrame(confettiTimer);
+            animateConfetti();
+
+            setTimeout(() => {
+                confettiActive = false;
+            }, 3000);
+        }
+
+        function animateConfetti() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let activeCount = 0;
+            particles.forEach((p) => {
+                p.y += p.speedY;
+                p.x += p.speedX;
+                p.rotation += p.rotationSpeed;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.fillStyle = p.color;
+                
+                ctx.beginPath();
+                if (p.radius > 6) {
+                    ctx.fillRect(-p.radius, -p.radius, p.radius * 2, p.radius);
+                } else {
+                    ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+
+                if (p.y < canvas.height && (confettiActive || p.y > 0)) {
+                    activeCount++;
+                }
+            });
+
+            if (activeCount > 0) {
+                confettiTimer = requestAnimationFrame(animateConfetti);
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+    </script>
+</body>
+</html>
